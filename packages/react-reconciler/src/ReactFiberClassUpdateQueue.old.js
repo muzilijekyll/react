@@ -165,6 +165,9 @@ if (__DEV__) {
   };
 }
 
+/*
+ * 为fiber初始化更新队列
+ */
 export function initializeUpdateQueue<State>(fiber: Fiber): void {
   const queue: UpdateQueue<State> = {
     baseState: fiber.memoizedState,
@@ -213,6 +216,18 @@ export function createUpdate(eventTime: number, lane: Lane): Update<*> {
   return update;
 }
 
+/*
+ * 将update加入fiber.updateQueue.shared.interleaved队列
+ *
+ * 所有update组成一个环，fiber.updateQueue.shared.interleaved指向最新的update
+ * <pre>
+ *  ➀ → ➁
+ *  ↑   ↓
+ *  ➃ ← ➂
+ *  ↑
+ *  fiber.updateQueue.shared.interleaved
+ * </pre>
+ */
 export function enqueueUpdate<State>(
   fiber: Fiber,
   update: Update<State>,

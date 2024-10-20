@@ -67,6 +67,7 @@ export function unmarkContainerAsRoot(node: Container): void {
   node[internalContainerInstanceKey] = null;
 }
 
+/**/
 export function isContainerMarkedAsRoot(node: Container): boolean {
   return !!node[internalContainerInstanceKey];
 }

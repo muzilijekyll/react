@@ -246,6 +246,39 @@ export function resolveLazyComponentTag(Component: Function): WorkTag {
 }
 
 // This is used to create an alternate fiber to do work on.
+/*
+ * 创建Fiber（复用）
+ *
+ * 因为是复用，所以该方法只会在更新时被调用，既然是更新，那必然存在旧Fiber。
+ *
+ * 因为能复用，所以新旧Fiber的key/type必然是相同的，
+ *
+ * 这里有一个优化的点：
+ *   如果每次根据旧Fiber创建新Fiber时都先new一个新Fiber再把旧Fiber的可复用属性赋值给新Fiber最后丢弃旧Fiber的话消耗可能太大，
+ *   而且我们可以发现，旧Fiber仅仅更新部分属性/重置部分属性后就能变成新Fiber，所以旧Fiber没必要丢弃，完全可以复用，但是呢
+ *   我们不能直接修改当前的旧Fiber，因为当前的旧Fiber可能后续还有用处，那如何才能在不修改当前旧fiber的前提下重用这个旧fiber呢，
+ *
+ *   第一次更新时，我们拿到的是fiber1（挂载阶段创建的fiber），我们不能直接修改它，所以创建一个fiber2（新fiber）并返回，
+ *   第二次更新时，我们拿到的是fiber2（就是上面创建的fiber2，它会在第二次更新时变成旧fiber），我们也不能直接修改它，所以需要返回别的fiber，
+ *     我们发现fiber1已经没用了，它只能被GC，完全可以把它返回当新fiber来用，
+ *     那如何拿到fiber1呢，我们在第一次更新中新建fiber2后把fiber1赋给fiber2的alternate属性，
+ *     这样在第二次更新时我们就能从fiber2的alternate属性上拿到fiber1，就能重用了，返回fiber1就行了
+ *   第三次更新时，我们拿到的是fiber1（就是第一次更新中的fiber1，在第二次更新中返回回来的），我们也不能直接修改它，所以需要返回别的fiber，
+ *     我们发现fiber2已经没用了，它只能被GC，完全可以把它返回当新fiber来用，
+ *     那如何拿到fiber2呢，我们在第一次更新中新建fiber2后，把fiber2赋给fiber1的alternate属性，
+ *     （最终效果就是，fiber1的alternate指向fiber2，fiber2的alternate指向fiber1，属于循环引用了）
+ *     这样在第三次更新时我们就能从fiber1的alternate属性上拿到fiber2，就能重用了，返回fiber2就行了
+ *   第四次更新时，我们拿到的是fiber2，返回它的alternate属性fiber1
+ *   第五次更新时，我们拿到的是fiber1，返回它的alternate属性fiber2
+ *
+ *   fiber1和fiber2通过alternate属性的循环引用还有一个用处：
+ *     新fiber需要通过其alternate属性关联对应的旧fiber
+ *     第一次更新时，fiber1是旧fiber，fiber2是新fiber，fiber2需要关联它对应的旧fiber也就是fiber1，所以需要把fiber2的alternate指向fiber1
+ *       这里额外做了一步，把fiber1的alternate指向了fiber2
+ *     第二次更新时，fiber2是旧fiber，fiber1是新fiber，fiber1需要关联它对应的旧fiber也就是fiber2，所以需要把fiber1的alternate指向fiber2，而这一步已经在第一次更新时做了
+ *
+ *   因为一直在复用fiber，所以有些属性必须重置为初始值。
+ */
 export function createWorkInProgress(current: Fiber, pendingProps: any): Fiber {
   let workInProgress = current.alternate;
   if (workInProgress === null) {

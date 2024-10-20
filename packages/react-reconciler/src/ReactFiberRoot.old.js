@@ -129,6 +129,18 @@ function FiberRootNode(
   }
 }
 
+/*
+ * 1. 创建FiberRoot
+ * 2. 创建RootFiber
+ * 3. 建立FiberRoot和RootFiber的循环引用
+ *
+ *    FiberRoot.current = RootFiber
+ *
+ *    RootFiber.stateNode → FiberRoot
+ *
+ * 4. 初始化RootFiber的状态 RootState
+ * 5. 初始化RootFiber的更新队列 Class Update Queue
+ */
 export function createFiberRoot(
   containerInfo: any,
   tag: RootTag,

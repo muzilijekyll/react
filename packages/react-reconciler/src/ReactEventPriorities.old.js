@@ -60,6 +60,15 @@ export function lowerEventPriority(
   return a === 0 || a > b ? a : b;
 }
 
+/*
+ * a 的优先级更高
+ *
+ * a 的优先级 > b 的优先级，返回 true
+ *
+ * a 的优先级 ≤ b 的优先级，返回 false
+ *
+ * 注意：优先级越高，对应的值越小
+ */
 export function isHigherEventPriority(
   a: EventPriority,
   b: EventPriority,

@@ -12,6 +12,7 @@
 // Please consider also adding to 'react-devtools-shared/src/backend/ReactSymbols'
 
 // The Symbol used to tag the ReactElement-like types.
+/**/
 export const REACT_ELEMENT_TYPE = Symbol.for('react.element');
 export const REACT_PORTAL_TYPE = Symbol.for('react.portal');
 export const REACT_FRAGMENT_TYPE = Symbol.for('react.fragment');

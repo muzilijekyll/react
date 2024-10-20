@@ -325,6 +325,9 @@ function ChildReconciler(shouldTrackSideEffects) {
     return existingChildren;
   }
 
+  /*
+   * 创建fiber（复用）
+   */
   function useFiber(fiber: Fiber, pendingProps: mixed): Fiber {
     // We currently set sibling to null and index to 0 here because it is easy
     // to forget to do before returning it. E.g. for the single child case.
@@ -334,6 +337,15 @@ function ChildReconciler(shouldTrackSideEffects) {
     return clone;
   }
 
+  /*
+   * 1.更新fiber的index
+   * 2.更新fiber的flags
+   *   在挂载阶段，把flags置为Forked
+   *   在更新阶段，如果是新建，则置为Placement
+   *             如果是复用，
+   *
+   * 我们知道，fiber有一个index属性，用来表示同级fiber节点的顺序，同一级中，第一个fiber节点的index是0，第二个fiber节点的index是1，以此类推
+   */
   function placeChild(
     newFiber: Fiber,
     lastPlacedIndex: number,
@@ -392,6 +404,11 @@ function ChildReconciler(shouldTrackSideEffects) {
     }
   }
 
+  /*
+   * 创建Fiber，能复用就复用，不能复用就返回新的
+   *
+   * 本方法内部只看type，type相同就复用，不同就创建新的；不看key，所以调用时需要保证key相同
+   */
   function updateElement(
     returnFiber: Fiber,
     current: Fiber | null,
@@ -563,6 +580,11 @@ function ChildReconciler(shouldTrackSideEffects) {
     return null;
   }
 
+  /*
+   * key相同，返回Fiber（复用或新建）；key不同，返回null。
+   *
+   * 如果旧Fiber的key与新Element的key相同，则返回更新后的Fiber（复用或新建），否则返回null
+   */
   function updateSlot(
     returnFiber: Fiber,
     oldFiber: Fiber | null,
@@ -1134,6 +1156,47 @@ function ChildReconciler(shouldTrackSideEffects) {
     return created;
   }
 
+  /*
+   * 协调子元素 - 只有一个子元素
+   *
+   * 在旧的子Fiber链中查找可以复用的Fiber，如果找到就复用，找不到就创建新的
+   *
+   * 对于旧Fiber链上的每一个元素，分别与新Element比较，
+   * 如果它们的key相同type也相同，说明这个旧Fiber可以复用，那就根据旧Fiber来创建新Element对应的新Fiber，
+   *   因为本方法只处理只有一个新Element的情况，所以所有后面的旧Fiber都可以删了
+   * 如果key相同但type不同，说明旧Fiber虽然与新Element对应，但不能复用，那就创建新Fiber，所有后面的旧Fiber都可以删了
+   * 如果key不同，说明当前这个旧Fiber与新Element不是对应关系，那就把这个旧Fiber删了，再比较下一个旧Fiber
+   *
+   *   旧：a1 -> a2 -> a3 （Fiber Tree）
+   *   新：b1             （Element Array）
+   *
+   *   1 比较a1与b1的key是否相同
+   *       如果相同，再比较它们的type是否相同
+   *         如果相同，则可以复用a1，删除a2/a3，根据a1构建新Fiber，返回新Fiber，结束 ➀
+   *         如果不同，删除 a1/a2/a3，构建新Fiber，返回新Fiber，结束 ➁
+   *       如果不同，删除a1，再进行步骤2 ➂
+   *
+   *   2 比较a2与b1的key是否相同
+   *       如果相同，再比较它们的type是否相同
+   *         如果相同，则可以复用a2，删除a3，根据a2构建新Fiber，返回新Fiber，结束 ➃
+   *         如果不同，删除 a2/a3，构建新Fiber，返回新Fiber，结束 ➄
+   *       如果不同，删除a2，再进行步骤3
+   *
+   *   3  比较a3与b1的key是否相同
+   *       如果相同，再比较它们的type是否相同
+   *         如果相同，则可以复用a3，根据a3构建新Fiber，返回新Fiber，结束 ➅
+   *         如果不同，删除 a3，构建新Fiber，返回新Fiber，结束 ➆
+   *       如果不同，删除a2
+   *
+   *   ➀ a1与b1的key相同，a1就是与b1对应的旧Fiber，type也相同，可以复用，a2/a3对应的Element已经被删了，所以删了它俩，这里的a2/a3代表a1后面的所有元素，
+   *     就是说a1后面的所有元素对应的Element都被删除了，所以它们都需要被删除
+   *   ➁ a1与b1的key相同，a1就是与b1对应的旧Fiber，但由于type不同所以无法复用，所以删了它，a2/a3对应的Element已经被删了，所以删了它俩
+   *   ➂ a1与b1的key不同，a1不是与b1对应的旧Fiber，所以删了它
+   *   ➃ 这里的删除a3是指删除a2后面的所以元素
+   *   ➄ a1已经在上一步中删除了
+   *   ➅ 这里没有删除a3后面的元素，是因为a3是最后一个，后面没有元素了
+   *   ➆ a1/a2已经在上一步中删除了
+   */
   function reconcileSingleElement(
     returnFiber: Fiber,
     currentFirstChild: Fiber | null,

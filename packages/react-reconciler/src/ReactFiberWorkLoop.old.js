@@ -425,6 +425,20 @@ export function getWorkInProgressRoot(): FiberRoot | null {
   return workInProgressRoot;
 }
 
+/*
+ * 一点想法：
+ *   react中有2个很明显的阶段，一个是render阶段，另一个是commit阶段，
+ *   在render阶段中，executionContext被置为RenderContext
+ *   在commit阶段中，executionContext被置为CommitContext
+ *   出了commit阶段后，executionContext被置为NoContext（ ？？？）
+ *
+ *   所以，当executionContext是RenderContext或CommitContext时，说明触发本方法调用的逻辑
+ *        处于react的执行过程中（也就是react在render/commit阶段的代码中调用了本方法），返
+ *        回当前系统时间
+ *        当executionContext不是RenderContext或CommitContext时，说明触发本方法调用的逻
+ *        辑不属于react（而属于我们自己写的代码），那就返回已经存在的currentEventTime，如果
+ *        这些外部逻辑多次触发了本方法的调用，那它们将得到相同的值
+ */
 export function requestEventTime() {
   if ((executionContext & (RenderContext | CommitContext)) !== NoContext) {
     // We're inside React, so it's fine to read the actual time.
@@ -444,6 +458,19 @@ export function getCurrentTime() {
   return now();
 }
 
+/*
+ * 本次更新使用哪个优先级
+ *
+ * 比如，在onClick事件中触发的更新，就使用click事件对应的优先级；在setTimeout中触发的更新，
+ * 就使用DefaultEventPriority
+ *
+ * 具体分以下4种情况讨论：
+ *
+ * 1. Special cases
+ * 2. Transition
+ * 3. Updates originated inside React
+ * 4. Updates originated outside React
+ */
 export function requestUpdateLane(fiber: Fiber): Lane {
   // Special cases
   const mode = fiber.mode;
@@ -490,6 +517,7 @@ export function requestUpdateLane(fiber: Fiber): Lane {
     return currentEventTransitionLane;
   }
 
+  // onClick 事件中触发的 setState 走这里
   // Updates originating inside certain React methods, like flushSync, have
   // their priority set by tracking it with a context variable.
   //
@@ -501,6 +529,7 @@ export function requestUpdateLane(fiber: Fiber): Lane {
     return updateLane;
   }
 
+  // setTimeout 中触发的 setState 走这里
   // This update originated outside React. Ask the host environment for an
   // appropriate priority, based on the type of event.
   //
@@ -525,6 +554,13 @@ function requestRetryLane(fiber: Fiber) {
   return claimNextRetryLane();
 }
 
+/*
+ * 核心代码就2行：
+ * ```
+ * markRootUpdated(root, lane, eventTime);
+ * ensureRootIsScheduled(root, eventTime);
+ * ```
+ */
 export function scheduleUpdateOnFiber(
   root: FiberRoot,
   fiber: Fiber,
@@ -683,6 +719,9 @@ export function isUnsafeClassRenderPhaseUpdate(fiber: Fiber) {
   );
 }
 
+// 每次更新都会调用
+// 每次退出任务前都会调用
+// 通过scheduler或microtask执行performSyncWorkOnRoot/performConcurrentWorkOnRoot
 // Use this function to schedule a task for a root. There's only one task per
 // root; if a task was already scheduled, we'll check to make sure the priority
 // of the existing task is the same as the priority of the next level that the
@@ -760,6 +799,7 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
       }
       scheduleLegacySyncCallback(performSyncWorkOnRoot.bind(null, root));
     } else {
+      // 同步，调用performSyncWorkOnRoot
       scheduleSyncCallback(performSyncWorkOnRoot.bind(null, root));
     }
     if (supportsMicrotasks) {
@@ -809,6 +849,7 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
         schedulerPriorityLevel = NormalSchedulerPriority;
         break;
     }
+    // 异步，通过scheduler调用performConcurrentWorkOnRoot
     newCallbackNode = scheduleCallback(
       schedulerPriorityLevel,
       performConcurrentWorkOnRoot.bind(null, root),
@@ -1575,6 +1616,9 @@ function handleError(root, thrownValue): void {
   } while (true);
 }
 
+/*
+ * 将 ReactCurrentDispatcher.current 置为 ContextOnlyDispatcher
+ */
 function pushDispatcher() {
   const prevDispatcher = ReactCurrentDispatcher.current;
   ReactCurrentDispatcher.current = ContextOnlyDispatcher;

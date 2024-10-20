@@ -657,6 +657,7 @@ export function diffProperties(
   let propKey;
   let styleName;
   let styleUpdates = null;
+  // 处理 不在nextProps中 但在lastProps中 且不为null 的属性，就是 被删除的属性
   for (propKey in lastProps) {
     if (
       nextProps.hasOwnProperty(propKey) ||
@@ -665,6 +666,7 @@ export function diffProperties(
     ) {
       continue;
     }
+    // 某个prop能到达这儿，说明：1.该prop不在nextProps中 2.该prop在lastProps中 3.该prop的值不为null
     if (propKey === STYLE) {
       const lastStyle = lastProps[propKey];
       for (styleName in lastStyle) {
@@ -697,6 +699,7 @@ export function diffProperties(
       (updatePayload = updatePayload || []).push(propKey, null);
     }
   }
+  // 处理 新增/值不同 的属性
   for (propKey in nextProps) {
     const nextProp = nextProps[propKey];
     const lastProp = lastProps != null ? lastProps[propKey] : undefined;

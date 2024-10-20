@@ -632,6 +632,15 @@ export function resetHooksAfterThrow(): void {
   localIdCounter = 0;
 }
 
+/*
+ * <pre>
+ * currentlyRenderingFiber.memoizedState
+ *                              ↓
+ *                              hook1 -> hook2 -> hook3
+ *                                                 ↑
+ *                                                 workInProgressHook
+ * </pre>
+ */
 function mountWorkInProgressHook(): Hook {
   const hook: Hook = {
     memoizedState: null,
@@ -653,6 +662,15 @@ function mountWorkInProgressHook(): Hook {
   return workInProgressHook;
 }
 
+/*
+ *
+ * 纯更新：
+ *   1. 执行第1个hook时，currentHook肯定是null，
+ *
+ * 挂载时触发的更新：
+ *
+ * 更新时触发的更新：
+ */
 function updateWorkInProgressHook(): Hook {
   // This function is used both for updates and for re-renders triggered by a
   // render phase update. It assumes there is either a current hook we can
@@ -1546,6 +1564,19 @@ function rerenderState<S>(
   return rerenderReducer(basicStateReducer, (initialState: any));
 }
 
+/*
+ * 创建Effect，并加入队列
+ *
+ * 所有Effect组成一个环，currentlyRenderingFiber.updateQueue.lastEffect指向最后一个Effect
+ *
+ * <pre>
+ *  ➀ → ➁
+ *  ↑   ↓
+ *  ➃ ← ➂
+ *  ↑
+ *  currentlyRenderingFiber.updateQueue.lastEffect
+ * </pre>
+ */
 function pushEffect(tag, create, destroy, deps) {
   const effect: Effect = {
     tag,
@@ -2317,6 +2348,11 @@ function dispatchSetState<S, A>(
   markUpdateInDevTools(fiber, lane, action);
 }
 
+/*
+ * 渲染阶段的更新
+ *
+ * 在更新分发函数（dispatchSetState/dispatchReducerAction）中调用
+ */
 function isRenderPhaseUpdate(fiber: Fiber) {
   const alternate = fiber.alternate;
   return (
@@ -2325,6 +2361,19 @@ function isRenderPhaseUpdate(fiber: Fiber) {
   );
 }
 
+/*
+ * 将update加入pending队列
+ *
+ * 所有update组成一个环，queue.pending指向最新的update
+ *
+ * <pre>
+ *  ➀ → ➁
+ *  ↑   ↓
+ *  ➃ ← ➂
+ *  ↑
+ *  queue.pending
+ * </pre>
+ */
 function enqueueRenderPhaseUpdate<S, A>(
   queue: UpdateQueue<S, A>,
   update: Update<S, A>,

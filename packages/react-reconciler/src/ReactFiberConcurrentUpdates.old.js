@@ -67,6 +67,18 @@ export function finishQueueingConcurrentUpdates() {
   }
 }
 
+/*
+ * 将update加入interleaved队列
+ *
+ * 所有update组成一个环，queue.interleaved指向最新的update
+ * <pre>
+ *  ➀ → ➁
+ *  ↑   ↓
+ *  ➃ ← ➂
+ *  ↑
+ *  queue.interleaved
+ * </pre>
+ */
 export function enqueueConcurrentHookUpdate<S, A>(
   fiber: Fiber,
   queue: HookQueue<S, A>,
@@ -109,6 +121,18 @@ export function enqueueConcurrentHookUpdateAndEagerlyBailout<S, A>(
   queue.interleaved = update;
 }
 
+/*
+ * 将update加入interleaved队列
+ *
+ * 所有update组成一个环，queue.interleaved指向最新的update
+ * <pre>
+ *  ➀ → ➁
+ *  ↑   ↓
+ *  ➃ ← ➂
+ *  ↑
+ *  queue.interleaved
+ * </pre>
+ */
 export function enqueueConcurrentClassUpdate<State>(
   fiber: Fiber,
   queue: ClassQueue<State>,

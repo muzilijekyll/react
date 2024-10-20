@@ -163,6 +163,9 @@ ReactDOMHydrationRoot.prototype.unmount = ReactDOMRoot.prototype.unmount = funct
   }
 };
 
+/*
+ * 创建 ReactDOMRoot，ReactDOMRoot 的类型是 RootType，内部封装了 FiberRoot
+ */
 export function createRoot(
   container: Element | Document | DocumentFragment,
   options?: CreateRootOptions,
@@ -327,6 +330,9 @@ export function hydrateRoot(
   return new ReactDOMHydrationRoot(root);
 }
 
+/*
+ * 100%
+ */
 export function isValidContainer(node: any): boolean {
   return !!(
     node &&
@@ -352,6 +358,12 @@ export function isValidContainerLegacy(node: any): boolean {
   );
 }
 
+/*
+ * 校验container
+ *
+ * 1. container不允许是body
+ * 2. container不允许之前已经被createRoot()/render()方法初始化过
+ */
 function warnIfReactDOMContainerInDEV(container: any) {
   if (__DEV__) {
     if (

@@ -184,6 +184,51 @@ function getHighestPriorityLanes(lanes: Lanes | Lane): Lanes {
   }
 }
 
+/*
+ * 从 pendingLanes 中返回下一步要执行的 lane，一般是优先级最高的 lane
+ *
+ * 这段JavaScript代码是React内部用于调度和优先级管理的函数，特别是在并发模式（Concurrent Mode）下。
+ * 它的主要目的是根据当前的工作（wipLanes，即工作中进程（Work In Progress）的Lanes）和根（FiberRoot）的当前状态，
+ * 决定下一步应该处理哪些Lanes（即任务的优先级）。下面是对这段代码的详细解释：
+
+参数
+root: FiberRoot，代表React的根节点，包含了当前渲染的状态信息，如挂起的Lanes、pinged的Lanes等。
+
+wipLanes: Lanes，当前正在处理的工作的Lanes。
+
+返回值
+Lanes: 返回一个或多个Lanes，表示接下来应该处理的任务的优先级。
+逻辑流程
+早期退出：
+* 如果没有待处理的工作（pendingLanes为NoLanes），则直接返回NoLanes。
+
+非空闲工作优先：
+* 首先处理非空闲（non-idle）的工作。如果有非空闲的工作未被挂起（suspended），则优先处理这些工作。
+* 如果没有，但存在被ping的工作（可能是由于用户交互等），则处理这些被ping的工作。
+
+空闲工作：
+* 如果只剩下空闲工作，且这些工作未被挂起，则处理这些空闲工作。
+* 如果空闲工作也被挂起，但存在被ping的工作，则处理这些被ping的工作。
+
+与当前工作比较：
+* 如果已经有工作正在进行（wipLanes不为NoLanes），则比较新计算出的nextLanes与wipLanes的优先级。
+* 如果新工作的优先级不高于或等于当前工作，或者当前工作包含过渡（Transition）更新而新工作是默认（Default）更新，则继续当前工作。
+
+并发模式配置：
+* 如果应用启用了并发模式作为默认行为（ConcurrentUpdatesByDefaultMode），则直接返回计算出的nextLanes。
+* 否则，如果nextLanes包含连续输入（InputContinuousLane）的Lanes，则将其与默认（Default）的Lanes合并，以确保它们能在同一批次中处理。
+
+处理纠缠（Entanglement）：最后，检查是否有纠缠的Lanes（即必须一起处理的Lanes），如果有，则将它们添加到nextLanes中。
+
+关键点
+Lanes：React使用Lanes来表示任务的优先级，不同的Lanes代表不同的优先级级别。
+
+并发模式：在并发模式下，React可以暂停和恢复渲染工作，以响应用户输入或其他高优先级事件。
+
+纠缠：纠缠是React内部用于处理来自同一源的多个更新，确保它们以相同的批次处理的一种机制。
+
+这段代码是React内部调度系统的核心部分，它确保了React能够高效地处理不同类型的任务，并根据优先级和并发模式的要求来调度这些任务。
+ */
 export function getNextLanes(root: FiberRoot, wipLanes: Lanes): Lanes {
   // Early bailout if there's no pending work left.
   const pendingLanes = root.pendingLanes;
@@ -198,24 +243,32 @@ export function getNextLanes(root: FiberRoot, wipLanes: Lanes): Lanes {
 
   // Do not work on any idle work until all the non-idle work has finished,
   // even if the work is suspended.
+  // 非空闲的
   const nonIdlePendingLanes = pendingLanes & NonIdleLanes;
-  if (nonIdlePendingLanes !== NoLanes) {
+  if (nonIdlePendingLanes !== NoLanes) { // 有（非空闲的）
+    // 未挂起的
     const nonIdleUnblockedLanes = nonIdlePendingLanes & ~suspendedLanes;
-    if (nonIdleUnblockedLanes !== NoLanes) {
+    if (nonIdleUnblockedLanes !== NoLanes) { // 有（未挂起的）
+      // 优先级最高的（非空闲的、未挂起的）
       nextLanes = getHighestPriorityLanes(nonIdleUnblockedLanes);
-    } else {
+    } else { // 没有（未挂起的），全都是挂起的
+      // Pinged的
       const nonIdlePingedLanes = nonIdlePendingLanes & pingedLanes;
-      if (nonIdlePingedLanes !== NoLanes) {
+      if (nonIdlePingedLanes !== NoLanes) { // 有（Pinged的）
+        // 优先级最高的（非空闲的、Pinged的）
         nextLanes = getHighestPriorityLanes(nonIdlePingedLanes);
       }
     }
-  } else {
+  } else { // 没有（非空闲的），全都是空闲的
     // The only remaining work is Idle.
+    // 未挂起的
     const unblockedLanes = pendingLanes & ~suspendedLanes;
-    if (unblockedLanes !== NoLanes) {
+    if (unblockedLanes !== NoLanes) { // 有（未挂起的）
+      // 优先级最高的（空闲的、未挂起的）
       nextLanes = getHighestPriorityLanes(unblockedLanes);
-    } else {
-      if (pingedLanes !== NoLanes) {
+    } else { // 没有（未挂起的），全都是挂起的
+      if (pingedLanes !== NoLanes) { // 有（Pinged的）
+        // 优先级最高的（空闲的、Pinged的）
         nextLanes = getHighestPriorityLanes(pingedLanes);
       }
     }
@@ -386,6 +439,9 @@ function computeExpirationTime(lane: Lane, currentTime: number) {
   }
 }
 
+/*
+ * 把 FiberRoot.pendingLanes 中所以过期的 lane 加入 FiberRoot.expiredLanes
+ */
 export function markStarvedLanesAsExpired(
   root: FiberRoot,
   currentTime: number,
@@ -402,6 +458,23 @@ export function markStarvedLanesAsExpired(
   // Iterate through the pending lanes and check if we've reached their
   // expiration time. If so, we'll assume the update is being starved and mark
   // it as expired to force it to finish.
+
+  //          0(22)                  1(4) 0(5)
+  // lanes: 0b0000000000000000000000_1111_00000
+  // index:                          8765 43210
+
+  // index:                          8
+  // lane : 0b0000000000000000000000_1000_00000  // 1 << 8
+
+  // index:                           7
+  // lane : 0b0000000000000000000000_0100_00000  // 1 << 7
+
+  // index:                            6
+  // lane : 0b0000000000000000000000_0010_00000  // 1 << 6
+
+  // index:                             5
+  // lane : 0b0000000000000000000000_0001_00000  // 1 << 5
+
   let lanes = pendingLanes;
   while (lanes > 0) {
     const index = pickArbitraryLaneIndex(lanes);
@@ -489,6 +562,19 @@ export function isTransitionLane(lane: Lane) {
   return (lane & TransitionLanes) !== NoLanes;
 }
 
+/*
+ * 第1次返回：TransitionLane1
+ * 第2次返回：TransitionLane2
+ * ...
+ * ...
+ * 第16次返回：TransitionLane16
+ *
+ * 到TransitionLane16之后，再从TransitionLane1开始
+ *
+ * 第17次返回：TransitionLane1
+ * ...
+ * ...
+ */
 export function claimNextTransitionLane(): Lane {
   // Cycle through the lanes, assigning each new transition to the next lane.
   // In most cases, this means every transition gets its own lane, until we
@@ -510,6 +596,14 @@ export function claimNextRetryLane(): Lane {
   return lane;
 }
 
+/*
+ * 返回优先级最高的Lane，即最右边的Lane
+ * <pre>
+ *  lanes: 00000000000000000000000111100000
+ * -lanes: 11111111111111111111111000100000
+ *      &: 00000000000000000000000000100000
+ * </pre>
+ */
 export function getHighestPriorityLane(lanes: Lanes): Lane {
   return lanes & -lanes;
 }
@@ -522,10 +616,28 @@ export function pickArbitraryLane(lanes: Lanes): Lane {
   return getHighestPriorityLane(lanes);
 }
 
+/*
+ * 从左边起，第一个非零位的索引（从0开始）
+ * <pre>
+ * 00000000000000000000000000000001 -> 0
+ * 00000000000000000000000000000010 -> 1
+ * 00000000000000000000000000000100 -> 2
+ * 00000000000000000000000000001110 -> 3
+ * </pre>
+ */
 function pickArbitraryLaneIndex(lanes: Lanes) {
   return 31 - clz32(lanes);
 }
 
+/*
+ * 从左边起，第一个非零位的索引（从0开始）
+ * <pre>
+ * 00000000000000000000000000000001 -> 0
+ * 00000000000000000000000000000010 -> 1
+ * 00000000000000000000000000000100 -> 2
+ * 00000000000000000000000000001110 -> 3
+ * </pre>
+ */
 function laneToIndex(lane: Lane) {
   return pickArbitraryLaneIndex(lane);
 }
@@ -571,6 +683,15 @@ export function createLaneMap<T>(initial: T): LaneMap<T> {
   return laneMap;
 }
 
+/*
+ * 1. 把updateLane加入root.pendingLanes
+ *
+ * `root.pendingLanes |= updateLane;`
+ *
+ * 2. 记录本次更新所属的lane的发生时间（可能覆盖之前在该lane上发生的更新的时间，只记录最新时间）
+ *
+ * `root.eventTimes[index] = eventTime;`
+ */
 export function markRootUpdated(
   root: FiberRoot,
   updateLane: Lane,
